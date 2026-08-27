@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Proveedores Cristal — Panel de Administración (Fase 2)</title>
+  <link rel="icon" type="image/png" href="./assets/Logo sin fondo.png">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+  <!-- CABECERA PRINCIPAL -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand-group">
+        <img src="./assets/Logo sin fondo.png" alt="Logo Cristal" class="brand-logo">
+        <div>
+          <h1 class="brand-title">Proveedores Cristal</h1>
+          <div class="brand-subtitle">Panel Administrativo — Fase 2: Backend & Auth</div>
+        </div>
+      </div>
+      <div id="apiStatusBadge" class="badge-phase">Fase 2 — Infraestructura</div>
+    </div>
+  </header>
+
+  <!-- CONTENIDO PRINCIPAL -->
+  <main class="main-container">
+
+    <!-- BANNER CON LA MASCOTA OFICIAL -->
+    <section class="mascot-banner">
+      <div class="mascot-text">
+        <h2>¡Bienvenida al Panel!</h2>
+        <p>Validador de conexión segura con Google Apps Script, Google Sheets y Google Drive.</p>
+      </div>
+      <img src="./assets/Personaje.png" alt="Mascota Cristal" class="mascot-img">
+    </section>
+
+    <!-- CONFIGURACIÓN DE URL DE ENDPOINT API -->
+    <section class="card">
+      <div class="card-header">
+        <h2 class="card-title">⚙️ Conexión con Google Apps Script</h2>
+      </div>
+      <div class="config-box">
+        <label for="apiUrlInput">URL del Web App de Google Apps Script:</label>
+        <div class="input-group">
+          <input type="url" id="apiUrlInput" class="input-field" placeholder="https://script.google.com/macros/s/.../exec">
+          <button id="btnSaveApiUrl" class="btn btn-accent btn-sm">Guardar Endpoint</button>
+        </div>
+        <small style="color: var(--color-text-muted); display: block; margin-top: 0.35rem;">
+          Esta URL apunta a tu Web App privada de Google Apps Script. No se expone ningún secreto en el repositorio.
+        </small>
+      </div>
+    </section>
+
+    <!-- PANEL DE AUTENTICACIÓN / SESIÓN -->
+    <section class="card auth-panel">
+      <div class="card-header">
+        <h2 class="card-title">🔐 Autenticación de Administradora</h2>
+        <div id="sessionStatusBadge" class="session-badge session-inactive">○ No Autenticado</div>
+      </div>
+
+      <div id="sessionDetailsText" style="font-size: 0.9rem; color: var(--color-text-muted); margin-bottom: 0.5rem;">
+        Ingresa tu contraseña para acceder al sistema.
+      </div>
+
+      <div id="loginAlertBox" class="alert alert-info" style="display: none;"></div>
+
+      <!-- FORMULARIO DE LOGIN (Visible cuando NO está autenticado) -->
+      <div id="loginSection">
+        <form id="loginForm" style="display: flex; flex-direction: column; gap: 0.85rem;">
+          <div>
+            <label for="passwordInput" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem;">
+              Contraseña Maestra:
+            </label>
+            <input type="password" id="passwordInput" class="input-field" style="width: 100%;" placeholder="••••••••••••" required>
+          </div>
+          
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <input type="checkbox" id="rememberMeCheck" style="width: 16px; height: 16px; accent-color: var(--color-primary);">
+            <label for="rememberMeCheck" style="font-size: 0.85rem; color: var(--color-text-muted); cursor: pointer;">
+              Mantener sesión iniciada en este dispositivo
+            </label>
+          </div>
+
+          <button type="submit" id="btnLoginSubmit" class="btn btn-primary" style="width: 100%;">
+            Ingresar al Sistema
+          </button>
+        </form>
+      </div>
+
+      <!-- ACCIONES DE SESIÓN ACTIVA (Visible cuando SÍ está autenticado) -->
+      <div id="authSection" style="display: none;">
+        <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;">
+          <button id="btnVerifySession" class="btn btn-outline btn-sm">🔄 Verificar Sesión</button>
+          <button id="btnTestSheet" class="btn btn-primary btn-sm">📊 Probar Google Sheet</button>
+          <button id="btnTestDrive" class="btn btn-accent btn-sm">📁 Probar Google Drive</button>
+          <button id="btnLogout" class="btn btn-danger btn-sm">🚪 Cerrar Sesión</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SUITE DE PRUEBAS DE SEGURIDAD Y COMUNICACIÓN -->
+    <section class="card">
+      <div class="card-header">
+        <h2 class="card-title">🧪 Suite de Pruebas de Seguridad (Fase 2)</h2>
+        <button id="btnRunAllTests" class="btn btn-primary btn-sm">▶ Ejecutar Todas las Pruebas</button>
+      </div>
+
+      <p style="font-size: 0.85rem; color: var(--color-text-muted); margin-bottom: 1rem;">
+        Comprueba rigurosamente que las peticiones no autorizadas sean bloqueadas y que los accesos legítimos funcionen con tokens temporales.
+      </p>
+
+      <div class="test-suite">
+        <div class="test-item" data-test-id="test-1">
+          <div class="test-info">
+            <div class="test-name">1. testSheet sin Token</div>
+            <div class="test-desc">Verifica que no se pueda leer Sheets sin autenticación previa.</div>
+          </div>
+          <span class="test-status status-pending">Pendiente</span>
+        </div>
+
+        <div class="test-item" data-test-id="test-2">
+          <div class="test-info">
+            <div class="test-name">2. testDrive sin Token</div>
+            <div class="test-desc">Verifica que no se pueda acceder a Drive sin autenticación previa.</div>
+          </div>
+          <span class="test-status status-pending">Pendiente</span>
+        </div>
+
+        <div class="test-item" data-test-id="test-3">
+          <div class="test-info">
+            <div class="test-name">3. Token Falso o Inválido</div>
+            <div class="test-desc">Verifica que tokens no generados por el servidor sean rechazados.</div>
+          </div>
+          <span class="test-status status-pending">Pendiente</span>
+        </div>
+
+        <div class="test-item" data-test-id="test-4">
+          <div class="test-info">
+            <div class="test-name">4. Token Expirado o Malformado</div>
+            <div class="test-desc">Comprueba el rechazo ante tokens caducados o corruptos.</div>
+          </div>
+          <span class="test-status status-pending">Pendiente</span>
+        </div>
+
+        <div class="test-item" data-test-id="test-5">
+          <div class="test-info">
+            <div class="test-name">5. Login con Contraseña Incorrecta</div>
+            <div class="test-desc">Valida que contraseñas erróneas no otorguen sesión (LOGIN_FAILED).</div>
+          </div>
+          <span class="test-status status-pending">Pendiente</span>
+        </div>
+
+        <div class="test-item" data-test-id="test-6">
+          <div class="test-info">
+            <div class="test-name">6. Healthcheck Público</div>
+            <div class="test-desc">Comprueba la disponibilidad del servicio Apps Script.</div>
+          </div>
+          <span class="test-status status-pending">Pendiente</span>
+        </div>
+
+        <div class="test-item" data-test-id="test-7">
+          <div class="test-info">
+            <div class="test-name">7. Acceso a Google Sheet con Token</div>
+            <div class="test-desc">Comprueba lectura de encabezados y hojas del Spreadsheet.</div>
+          </div>
+          <span class="test-status status-pending">Pendiente</span>
+        </div>
+
+        <div class="test-item" data-test-id="test-8">
+          <div class="test-info">
+            <div class="test-name">8. Acceso a Google Drive con Token</div>
+            <div class="test-desc">Comprueba verificación de carpetas y permisos en Drive.</div>
+          </div>
+          <span class="test-status status-pending">Pendiente</span>
+        </div>
+
+        <div class="test-item" data-test-id="test-9">
+          <div class="test-info">
+            <div class="test-name">9. Verificación de Sesión Activa</div>
+            <div class="test-desc">Comprueba la validez y tiempo restante de la sesión.</div>
+          </div>
+          <span class="test-status status-pending">Pendiente</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONSOLA DE DIAGNÓSTICO EN TIEMPO REAL -->
+    <section class="card">
+      <div class="card-header">
+        <h2 class="card-title">🖥️ Consola de Diagnóstico & Tráfico de Red</h2>
+        <button id="btnClearTerminal" class="btn btn-outline btn-sm">Limpiar Consola</button>
+      </div>
+      <div id="diagnosticTerminal" class="terminal-card"></div>
+    </section>
+
+  </main>
+
+  <!-- PIE DE PÁGINA -->
+  <footer class="app-footer">
+    <p><strong>Proveedores Cristal</strong> &bull; Sistema de Gestión y Catálogo &bull; Fase 2 Validada</p>
+    <p style="margin-top: 0.25rem; font-size: 0.75rem;">Backend Google Apps Script &bull; Base de Datos Google Sheets &bull; Almacenamiento Google Drive</p>
+  </footer>
+
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
