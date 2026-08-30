@@ -674,8 +674,13 @@ function renderProductsGrid() {
       : '<span class="product-status-badge badge-muted">INACTIVO</span>';
 
     const priceFormatted = `$ ${parseFloat(p.precio || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })} ${p.moneda || 'ARS'}`;
-    const imgHtml = p.drive_view_url
-      ? `<img src="${p.drive_view_url}" alt="${escapeHtml(p.nombre_referencia)}" class="product-img" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\'product-no-img\'>📦</div>'">`
+    const rawImg = p.drive_view_url || p.drive_file_id;
+    const directImgUrl = getDirectDriveImageUrl(rawImg);
+    const driveIdMatch = rawImg ? (String(rawImg).match(/id=([a-zA-Z0-9_-]+)/i) || String(rawImg).match(/\/d\/([a-zA-Z0-9_-]+)/i)) : null;
+    const fileId = p.drive_file_id || (driveIdMatch ? driveIdMatch[1] : (rawImg && /^[a-zA-Z0-9_-]{20,}$/.test(rawImg) ? rawImg : ''));
+
+    const imgHtml = directImgUrl
+      ? `<img src="${directImgUrl}" alt="${escapeHtml(p.nombre_referencia)}" class="product-img" loading="lazy" referrerpolicy="no-referrer" onerror="if(!this.dataset.fb && '${fileId}'){this.dataset.fb='1';this.src='https://drive.google.com/thumbnail?id=${fileId}&sz=w800';}else{this.parentElement.innerHTML='<div class=\\'product-no-img\\'>📦</div>';}">`
       : '<div class="product-no-img">📦</div>';
 
     html += `
@@ -1045,13 +1050,46 @@ function compressImageWithCanvas(file, maxDimension = 1200, quality = 0.85) {
   });
 }
 
+/**
+ * Transforma identificadores o URLs de Google Drive a URLs CDN directas y optimizadas para <img>
+ */
+function getDirectDriveImageUrl(urlOrId) {
+  if (!urlOrId) return '';
+  const str = String(urlOrId).trim();
+
+  // Si ya es un Data URI (base64) o URL de blob, devolverlo directamente
+  if (str.startsWith('data:') || str.startsWith('blob:')) {
+    return str;
+  }
+
+  // Extraer el ID de archivo de Google Drive
+  let fileId = '';
+  const idMatch = str.match(/id=([a-zA-Z0-9_-]+)/i) ||
+                  str.match(/\/d\/([a-zA-Z0-9_-]+)/i) ||
+                  str.match(/file\/d\/([a-zA-Z0-9_-]+)/i);
+
+  if (idMatch && idMatch[1]) {
+    fileId = idMatch[1];
+  } else if (/^[a-zA-Z0-9_-]{20,}$/.test(str)) {
+    fileId = str;
+  }
+
+  if (fileId) {
+    // Endpoint oficial de Google CDN para archivos públicos de Drive
+    return `https://lh3.googleusercontent.com/d/${fileId}`;
+  }
+
+  return str;
+}
+
 function showImagePreview(url, statsText) {
   const container = document.getElementById('imagePreviewContainer');
   const img = document.getElementById('imagePreviewImg');
   const text = document.getElementById('imageStatsText');
 
   if (container && img && text) {
-    img.src = url;
+    img.src = getDirectDriveImageUrl(url);
+    img.setAttribute('referrerpolicy', 'no-referrer');
     text.innerHTML = statsText || '';
     container.style.display = 'flex';
   }
