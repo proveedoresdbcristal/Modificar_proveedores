@@ -30,8 +30,110 @@ const AppState = {
   activeProvidersCache: [],
 
   // Imagen en proceso de carga
-  pendingImage: null
+  pendingImage: null,
+
+  // Bloqueo de concurrencia para evitar doble envío al guardar proveedor
+  isSavingProvider: false
 };
+
+// Clave de almacenamiento de caché técnica de geocodificación (Etapa 9)
+const GEOCODE_CACHE_KEY = 'CRISTAL_GEO_CACHE_v1';
+
+function normalizeAddressForGeocoding(address) {
+  if (!address || typeof address !== 'string') return '';
+  return address
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function getCachedGeocode(address) {
+  try {
+    const raw = sessionStorage.getItem(GEOCODE_CACHE_KEY);
+    if (!raw) return null;
+    const cache = JSON.parse(raw);
+    const key = normalizeAddressForGeocoding(address).toLowerCase();
+    return cache[key] || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function setCachedGeocode(address, result) {
+  try {
+    const raw = sessionStorage.getItem(GEOCODE_CACHE_KEY);
+    const cache = raw ? JSON.parse(raw) : {};
+    const key = normalizeAddressForGeocoding(address).toLowerCase();
+    cache[key] = result;
+    sessionStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) {
+    // Ignorar excedente de almacenamiento
+  }
+}
+
+/**
+ * Geocodificación automática bajo demanda utilizando OpenStreetMap / Nominatim
+ */
+async function geocodeAddress(address) {
+  const normalized = normalizeAddressForGeocoding(address);
+  if (!normalized || normalized.length < 3) return null;
+
+  // 1. Consultar caché local
+  const cached = getCachedGeocode(normalized);
+  if (cached) {
+    if (cached.notFound) return null;
+    logToTerminal(`[GEO] Ubicación recuperada de caché: "${normalized}"`, 'muted');
+    return cached;
+  }
+
+  // 2. Construir consulta georreferenciada segura con contexto nacional
+  let queryAddress = normalized;
+  if (!normalized.toLowerCase().includes('argentina') &&
+      !normalized.toLowerCase().includes('bs as') &&
+      !normalized.toLowerCase().includes('buenos aires') &&
+      !normalized.toLowerCase().includes('caba')) {
+    queryAddress = `${normalized}, Argentina`;
+  }
+
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryAddress)}&limit=1`;
+  logToTerminal(`[GEO] Geocodificando dirección: "${queryAddress}"...`, 'info');
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'Accept-Language': 'es'
+      }
+    });
+
+    if (!response.ok) {
+      logToTerminal(`[GEO] Error HTTP de geocodificación: ${response.status}`, 'warning');
+      return null;
+    }
+
+    const data = await response.json();
+    if (Array.isArray(data) && data.length > 0) {
+      const item = data[0];
+      const lat = parseFloat(item.lat);
+      const lon = parseFloat(item.lon);
+      if (!isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+        const result = {
+          lat: lat,
+          lon: lon,
+          displayName: item.display_name
+        };
+        setCachedGeocode(normalized, result);
+        logToTerminal(`[GEO] Coordenadas obtenidas: (${lat.toFixed(5)}, ${lon.toFixed(5)})`, 'success');
+        return result;
+      }
+    }
+
+    logToTerminal(`[GEO] Sin resultados de geocodificación para: "${normalized}"`, 'warning');
+    setCachedGeocode(normalized, { notFound: true });
+    return null;
+  } catch (err) {
+    logToTerminal(`[GEO] Excepción de red al geocodificar: ${err.message}`, 'error');
+    return null;
+  }
+}
 
 // ============================================================================
 // 2. CAPA DE COMUNICACIÓN CON LA API (ApiClient)
@@ -495,12 +597,18 @@ function openProviderModal(prov = null) {
   const modal = document.getElementById('modalProvider');
   const title = document.getElementById('modalProviderTitle');
   const form = document.getElementById('formProvider');
+  const geoBox = document.getElementById('provGeoStatusBox');
+  const geoText = document.getElementById('provGeoStatusText');
 
   clearFieldErrors();
   form.reset();
 
   if (prov) {
     title.innerText = `Editar Proveedor (${prov.id_proveedor})`;
+    form.dataset.originalAddress = (prov.direccion || '').trim();
+    form.dataset.originalLat = (prov.latitud !== undefined && prov.latitud !== null && prov.latitud !== '') ? String(prov.latitud) : '';
+    form.dataset.originalLon = (prov.longitud !== undefined && prov.longitud !== null && prov.longitud !== '') ? String(prov.longitud) : '';
+
     document.getElementById('provId').value = prov.id_proveedor || '';
     document.getElementById('provNombre').value = prov.nombre || '';
     document.getElementById('provEstado').value = prov.estado || 'ACTIVO';
@@ -513,10 +621,35 @@ function openProviderModal(prov = null) {
     document.getElementById('provMinimo').value = prov.minimo_compra || '';
     document.getElementById('provTransportes').value = prov.transportes_usados || '';
     document.getElementById('provNotas').value = prov.notas_generales || '';
+
+    if (geoBox && geoText) {
+      const hasCoords = prov.latitud !== '' && prov.latitud !== null && prov.latitud !== undefined &&
+                        prov.longitud !== '' && prov.longitud !== null && prov.longitud !== undefined &&
+                        !isNaN(parseFloat(prov.latitud)) && !isNaN(parseFloat(prov.longitud));
+      if (hasCoords) {
+        geoBox.className = 'geo-status-box';
+        geoText.innerHTML = `📍 Ubicación guardada: <strong>(${parseFloat(prov.latitud).toFixed(4)}, ${parseFloat(prov.longitud).toFixed(4)})</strong>`;
+        geoBox.style.display = 'flex';
+      } else if (prov.direccion && prov.direccion.trim()) {
+        geoBox.className = 'geo-status-box warning';
+        geoText.innerText = '📍 Dirección registrada sin coordenadas guardadas. Se geocodificará al guardar.';
+        geoBox.style.display = 'flex';
+      } else {
+        geoBox.style.display = 'none';
+      }
+    }
   } else {
     title.innerText = '➕ Nuevo Proveedor';
+    form.dataset.originalAddress = '';
+    form.dataset.originalLat = '';
+    form.dataset.originalLon = '';
+
     document.getElementById('provId').value = '';
     document.getElementById('provEstado').value = 'ACTIVO';
+    document.getElementById('provLatitud').value = '';
+    document.getElementById('provLongitud').value = '';
+
+    if (geoBox) geoBox.style.display = 'none';
   }
 
   modal.classList.add('active');
@@ -526,22 +659,54 @@ async function handleSaveProviderSubmit(e) {
   e.preventDefault();
   clearFieldErrors();
 
+  if (AppState.isSavingProvider) return; // Protección contra doble clic
+  AppState.isSavingProvider = true;
+
   const nombre = document.getElementById('provNombre').value.trim();
   if (nombre.length < 2 || nombre.length > 100) {
     showFieldError('errProvNombre', 'El nombre debe tener entre 2 y 100 caracteres.');
+    AppState.isSavingProvider = false;
     return;
   }
 
-  const lat = document.getElementById('provLatitud').value;
-  if (lat && (isNaN(parseFloat(lat)) || parseFloat(lat) < -90 || parseFloat(lat) > 90)) {
-    showToast('La latitud debe estar entre -90 y 90.', 'error');
-    return;
-  }
+  const form = document.getElementById('formProvider');
+  const newAddress = document.getElementById('provDireccion').value.trim();
+  const oldAddress = (form.dataset.originalAddress || '').trim();
+  const oldLat = form.dataset.originalLat || '';
+  const oldLon = form.dataset.originalLon || '';
 
-  const lng = document.getElementById('provLongitud').value;
-  if (lng && (isNaN(parseFloat(lng)) || parseFloat(lng) < -180 || parseFloat(lng) > 180)) {
-    showToast('La longitud debe estar entre -180 y 180.', 'error');
-    return;
+  let finalLat = '';
+  let finalLon = '';
+  let geoSuccess = false;
+  let geoAttempted = false;
+
+  if (!newAddress) {
+    // Caso 1: Dirección vacía -> eliminar coordenadas
+    finalLat = '';
+    finalLon = '';
+  } else if (newAddress === oldAddress && oldLat !== '' && oldLon !== '' && !isNaN(parseFloat(oldLat)) && !isNaN(parseFloat(oldLon))) {
+    // Caso 2: La dirección no cambió y ya posee coordenadas válidas -> conservar
+    finalLat = parseFloat(oldLat);
+    finalLon = parseFloat(oldLon);
+  } else {
+    // Caso 3: Dirección nueva, modificada, o anterior sin coordenadas -> Geocodificar
+    geoAttempted = true;
+    setButtonLoading('btnSaveProviderSubmit', true, '📍 Determinando ubicación...');
+
+    try {
+      const geo = await geocodeAddress(newAddress);
+      if (geo && typeof geo.lat === 'number' && typeof geo.lon === 'number') {
+        finalLat = geo.lat;
+        finalLon = geo.lon;
+        geoSuccess = true;
+      } else {
+        finalLat = '';
+        finalLon = '';
+      }
+    } catch (geoErr) {
+      finalLat = '';
+      finalLon = '';
+    }
   }
 
   const payload = {
@@ -550,9 +715,9 @@ async function handleSaveProviderSubmit(e) {
     estado: document.getElementById('provEstado').value,
     whatsapp: document.getElementById('provWhatsapp').value.trim(),
     rubro_categoria: document.getElementById('provRubro').value.trim(),
-    direccion: document.getElementById('provDireccion').value.trim(),
-    latitud: lat ? parseFloat(lat) : '',
-    longitud: lng ? parseFloat(lng) : '',
+    direccion: newAddress,
+    latitud: finalLat !== '' ? finalLat : '',
+    longitud: finalLon !== '' ? finalLon : '',
     pagina_web: document.getElementById('provWeb').value.trim(),
     minimo_compra: document.getElementById('provMinimo').value.trim(),
     transportes_usados: document.getElementById('provTransportes').value.trim(),
@@ -565,7 +730,17 @@ async function handleSaveProviderSubmit(e) {
     const res = await callApi('saveProvider', payload);
     if (res.success) {
       closeAllModals();
-      showToast(res.operation === 'CREATE' ? '¡Proveedor creado exitosamente!' : 'Proveedor actualizado.', 'success');
+
+      if (geoAttempted) {
+        if (geoSuccess) {
+          showToast(`✓ Proveedor guardado. 📍 Ubicación geográfica determinada automáticamente.`, 'success');
+        } else {
+          showToast(`✓ Proveedor guardado. ⚠️ No fue posible determinar la ubicación en mapa para la dirección ingresada.`, 'warning');
+        }
+      } else {
+        showToast(res.operation === 'CREATE' ? '¡Proveedor creado exitosamente!' : 'Proveedor actualizado.', 'success');
+      }
+
       loadProviders();
       loadDashboardSummary();
       loadActiveProvidersCache();
@@ -575,6 +750,7 @@ async function handleSaveProviderSubmit(e) {
   } catch (err) {
     showToast('Error de comunicación al guardar proveedor.', 'error');
   } finally {
+    AppState.isSavingProvider = false;
     setButtonLoading('btnSaveProviderSubmit', false, 'Guardar Proveedor');
   }
 }

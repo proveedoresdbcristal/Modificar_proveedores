@@ -409,20 +409,18 @@
           </div>
         </div>
 
+        <input type="hidden" id="provLatitud">
+        <input type="hidden" id="provLongitud">
+
         <div class="form-group">
-          <label for="provDireccion">Dirección Física</label>
+          <label for="provDireccion">Dirección Comercial (Física)</label>
           <input type="text" id="provDireccion" class="input-field" placeholder="Ej: Av. Corrientes 1234, CABA">
+          <small class="muted-text">La ubicación geográfica se determinará automáticamente a partir de esta dirección al guardar.</small>
         </div>
 
-        <div class="form-row">
-          <div class="form-group flex-1">
-            <label for="provLatitud">Latitud (-90 a 90)</label>
-            <input type="number" step="any" id="provLatitud" class="input-field" placeholder="-34.6037">
-          </div>
-          <div class="form-group flex-1">
-            <label for="provLongitud">Longitud (-180 a 180)</label>
-            <input type="number" step="any" id="provLongitud" class="input-field" placeholder="-58.3816">
-          </div>
+        <div id="provGeoStatusBox" class="geo-status-box" style="display: none;">
+          <span>📍</span>
+          <span id="provGeoStatusText">Ubicación detectada automáticamente</span>
         </div>
 
         <div class="form-row">
